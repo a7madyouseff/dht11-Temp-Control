@@ -1,4 +1,4 @@
-// LCD Initialization and Display Message...
+// LCD Initialization and Display Message...زز
 #include <xc.h>
 #include <stdint.h>
 #include <stdio.h>
