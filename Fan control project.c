@@ -18,6 +18,25 @@
 #define  DHT11_Pin PORTDbits.RD5
 #define DHT11_Pin_Dir TRISDbits.TRISD5
 
+// FAN
+#define FAN PORTCbits.RC0
+
+
+// RGB LEDs on PORTD pins
+#define RED_LED   PORTDbits.RD3
+#define GREEN_LED PORTDbits.RD4
+#define BLUE_LED  PORTDbits.RD6   // Optional
+
+void UART_Init() {
+    TRISC6 = 0; // TX output
+    TRISC7 = 1; // RX input
+    SPBRG = 129; // For 9600 baud at 20MHz
+    BRGH = 1;
+    SYNC = 0;
+    SPEN = 1;
+    TXEN = 1;
+    CREN = 1;
+}
 
 
 // LCD Functions
