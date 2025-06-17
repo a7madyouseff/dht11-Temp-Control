@@ -14,6 +14,11 @@
 #define EN RD2
 #define LCD_DATA PORTB
 #define LCD_DIR TRISB
+// DHT11
+#define  DHT11_Pin PORTDbits.RD5
+#define DHT11_Pin_Dir TRISDbits.TRISD5
+
+
 
 // LCD Functions
 void lcd_cmd(unsigned char cmd) {
@@ -42,6 +47,49 @@ void lcd_init() {
     lcd_cmd(0x01); // Clear display
     __delay_ms(2);
 }
+//dh11 sensor functions
+unsigned char RH_int, RH_dec, Temp_int, Temp_dec, checksum;
+char Check;
+void dht11_start(){
+ DHT11_Pin_Dir = 0;//Con pin is output
+DHT11_Pin=0;//pin is low start signal
+__delay_ms(18);
+DHT11_Pin=1;//pin is high to relese the line
+__delay_us(30);
+DHT11_Pin_Dir = 1;//Con pin is input (to read response)
+}
+void dht11_response(){
+Check=0;//reset  
+__delay_us(40);
+if (DHT11_Pin==0){   //cheks if pin is low it recived start signal 
+        __delay_us(80);     
+        
+        if (DHT11_Pin == 1) //check if pin is high to send data
+            Check = 1;       
+        
+        __delay_us(50);    
+    }
+}
+char dht11_read_byte() {
+    char data = 0;
+    for (char i = 0; i < 8; i++) {
+        while (!DHT11_Pin); // wait for pin to go high
+        __delay_us(30);
+        if (DHT11_Pin == 0)
+            data &= ~(1 << (7 - i));
+        else {
+            data |= (1 << (7 - i));
+            while (DHT11_Pin); // wait for pin to go low
+        }
+    }
+    return data;
+}
+    
+
+
+
+
+
 
 void main() {
     // Pin directions
