@@ -116,23 +116,148 @@ char dht11_read_byte() {
     }
     return data;
 }
+// Globals
+char mode = 0; // 0 = AUTO, 1 = MANUAL
+char fan_state = 0;  // 0 = OFF, 1 = ON
+
+// Update LCD with temperature, humidity and mode
+void update_lcd() {
+    lcd_cmd(0x80);
+    char buffer[16];
+    if (RH_int == 0xFF && Temp_int == 0xFF) {
+        lcd_puts("Sensor Error   ");
+    } else {
+        sprintf(buffer, "T:%2dC H:%2d%%", Temp_int, RH_int);
+        lcd_puts(buffer);
+    }
+
+    lcd_cmd(0xC0);
+    lcd_puts("Mode: ");
+    if (mode == 0) lcd_puts("AUTO   ");
+    else          lcd_puts("MANUAL ");
     
-
-
-
-
-
+}
+void update_rgb_leds() {
+    if (Temp_int <= 26) {
+        GREEN_LED = 1;
+        RED_LED = 0;
+    } else {
+        GREEN_LED = 0;
+        RED_LED = 1;
+    }
+    BLUE_LED = 0;  // off 
+}
 
 void main() {
     // Pin directions
     TRISC7 = 1; // UART RX input
+    TRISC0 = 0;   // FAN output
+    TRISD3 = 0;   // RED LED output
+    TRISD4 = 0;   // GREEN LED output
+    TRISD6 = 0;   // BLUE LED output
+
+    FAN = 0;
+    RED_LED = 0;
+    GREEN_LED = 0;
+    BLUE_LED = 0;
+
 
     // Initialize LCD
     lcd_init();
-    
+    UART_Init();// Initialize UART
     // Display message
     lcd_puts("Temperature Measuring");
     __delay_ms(2000);  // Wait for 2 seconds
     
     lcd_cmd(0x01);     // Clear display
+    while(1) {
+          // UART Command Processing with error clearing
+        if (RCIF) {
+            // Clear UART errors
+            if (OERR) {
+                CREN = 0;
+                CREN = 1;
+            }
+            if (FERR) {
+                char dummy = RCREG;  // Clear framing error by reading buffer
+            }
+
+            char command = UART_Read();
+
+            if (command == 'a' || command == 'A') {
+                mode = 0;
+                UART_Write_Text("Switched to AUTO\r\n");
+            }
+            else if (command == 'm' || command == 'M') {
+                mode = 1;
+                UART_Write_Text("Switched to MANUAL\r\n");
+            }
+            else if (command == '1') {
+                if (mode == 1) {
+                    if (!fan_state) {
+                        FAN = 1;
+                        fan_state = 1;
+                        UART_Write_Text("Fan is ON\r\n");
+                    }
+                } else {
+                    UART_Write_Text("Cannot control fan manually in AUTO mode\r\n");
+                }
+            }
+            else if (command == '0') {
+                if (mode == 1) {
+                    if (fan_state) {
+                        FAN = 0;
+                        fan_state = 0;
+                        UART_Write_Text("Fan is OFF\r\n");
+                    }
+                } else {
+                    UART_Write_Text("Cannot control fan manually in AUTO mode\r\n");
+                }
+            }
+            else {
+                UART_Write_Text("Unknown command\r\n");
+            }
+        }
+          // DHT11 Sensor Reading
+        dht11_start();
+        dht11_response();
+        if (Check == 1) {
+            RH_int = dht11_read_byte();
+            RH_dec = dht11_read_byte();
+            Temp_int = dht11_read_byte();
+            Temp_dec = dht11_read_byte();
+            checksum = dht11_read_byte();
+
+            // Simple checksum validation
+            if (checksum == ((RH_int + RH_dec + Temp_int + Temp_dec) & 0xFF)) {
+                // Auto mode fan control with terminal message on change
+                if (mode == 0) {
+                    char new_fan_state = (Temp_int > 26) ? 1 : 0;
+                    if (new_fan_state != fan_state) {
+                        fan_state = new_fan_state;
+                        FAN = fan_state;
+                        if (fan_state)
+                            UART_Write_Text("Fan is ON\r\n");
+                        else
+                            UART_Write_Text("Fan is OFF\r\n");
+                    }
+                }
+            update_rgb_leds();
+                update_lcd();
+            } else {
+                UART_Write_Text("Checksum error\r\n");
+                // Set error values so LCD shows sensor error
+                RH_int = 0xFF;
+                Temp_int = 0xFF;
+                update_lcd();
+            }
+        } else {
+            UART_Write_Text("No response from sensor\r\n");
+            RH_int = 0xFF;
+            Temp_int = 0xFF;
+            update_lcd();
+        }
+
+        __delay_ms(1500);
+    }
 }
