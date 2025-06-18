@@ -1,4 +1,4 @@
-// LCD Initialization and Display Message...زز
+// LCD Initialization and Display Message...
 #include <xc.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -26,7 +26,7 @@
 #define RED_LED   PORTDbits.RD3
 #define GREEN_LED PORTDbits.RD4
 #define BLUE_LED  PORTDbits.RD6   // Optional
-
+// UART functions
 void UART_Init() {
     TRISC6 = 0; // TX output
     TRISC7 = 1; // RX input
@@ -36,6 +36,19 @@ void UART_Init() {
     SPEN = 1;
     TXEN = 1;
     CREN = 1;
+}
+void UART_Write(char data) {
+    while (!TXIF);
+    TXREG = data;
+}
+
+void UART_Write_Text(const char* text) {
+    while (*text) UART_Write(*text++);
+}
+
+char UART_Read() {
+    while (!RCIF);
+    return RCREG;
 }
 
 
