@@ -119,8 +119,9 @@ char dht11_read_byte() {
 }
 
 // Globals
-char mode = 1; // Start in MANUAL mode (0 = AUTO, 1 = MANUAL)
-char prev_fan_state = -1;
+char mode = 0; // 0 = AUTO, 1 = MANUAL
+char prev_mode = -1;
+char fan_state = 0;  // 0 = OFF, 1 = ON
 
 // Update LCD with temperature, humidity and mode
 void update_lcd() {
@@ -172,17 +173,8 @@ void main() {
     lcd_cmd(0x01);
 
     while (1) {
-        // UART Error Handling & Command Processing
+        // 1. UART Command Processing
         if (RCIF) {
-            // Clear UART errors
-            if (OERR) {
-                CREN = 0;
-                CREN = 1;
-            }
-            if (FERR) {
-                char dummy = RCREG;
-            }
-
             char command = UART_Read();
 
             if (command == 'a' || command == 'A') {
@@ -193,19 +185,34 @@ void main() {
                 mode = 1;
                 UART_Write_Text("Switched to MANUAL\r\n");
             }
-            else if ((command == '1' || command == '0') && mode == 1) {
-                FAN = (command == '1') ? 1 : 0;
-                UART_Write_Text(FAN ? "Fan is ON\r\n" : "Fan is OFF\r\n");
+            else if (command == '1') {
+                if (mode == 1) {
+                    if (!fan_state) {
+                        FAN = 1;
+                        fan_state = 1;
+                        UART_Write_Text("Fan is ON\r\n");
+                    }
+                } else {
+                    UART_Write_Text("Cannot control fan manually in AUTO mode\r\n");
+                }
             }
-            else if ((command == '1' || command == '0') && mode == 0) {
-                UART_Write_Text("Invalid command in AUTO mode\r\n");
+            else if (command == '0') {
+                if (mode == 1) {
+                    if (fan_state) {
+                        FAN = 0;
+                        fan_state = 0;
+                        UART_Write_Text("Fan is OFF\r\n");
+                    }
+                } else {
+                    UART_Write_Text("Cannot control fan manually in AUTO mode\r\n");
+                }
             }
             else {
                 UART_Write_Text("Unknown command\r\n");
             }
         }
 
-        // DHT11 Sensor Reading
+        // 2. DHT11 Sensor Reading
         dht11_start();
         dht11_response();
         if (Check) {
@@ -216,21 +223,24 @@ void main() {
             checksum = dht11_read_byte();
 
             if (checksum == ((RH_int + RH_dec + Temp_int + Temp_dec) & 0xFF)) {
-                // Auto mode fan control
+                // Auto mode fan control with terminal message on change
                 if (mode == 0) {
-                    FAN = (Temp_int > 26) ? 1 : 0;
+                    char new_fan_state = (Temp_int > 26) ? 1 : 0;
+                    if (new_fan_state != fan_state) {
+                        fan_state = new_fan_state;
+                        FAN = fan_state;
+                        if (fan_state)
+                            UART_Write_Text("Fan is ON\r\n");
+                        else
+                            UART_Write_Text("Fan is OFF\r\n");
+                    }
                 }
 
                 update_rgb_leds();
                 update_lcd();
-
-                // Show fan state anytime it changes
-                if (FAN != prev_fan_state) {
-                    UART_Write_Text(FAN ? "Fan is ON\r\n" : "Fan is OFF\r\n");
-                    prev_fan_state = FAN;
-                }
             } else {
                 UART_Write_Text("Checksum error\r\n");
+                // Set error values so LCD shows sensor error
                 RH_int = 0xFF;
                 Temp_int = 0xFF;
                 update_lcd();
